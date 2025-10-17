@@ -332,8 +332,6 @@ smart-resume-screener/
 ---
 
 ## 📞 Contact & Support
-
--
 - **Email**: kshitijdalvi22@gmail.com
 
 
