@@ -307,15 +307,15 @@ smart-resume-screener/
 ## 📸 Screenshots
 
 ### Upload Interface
-![Upload Screenshot](https://github.com/kshitijdalvi4/Unthinkable/blob/main/docs/images/Architechture-RAG.png)
-*Clean, intuitive resume upload interface with drag-and-drop support*
+![Upload Screenshot](docs/images/Screenshot%202025-10-17%20140345.png)
+*Upload Resume*
 
 ### Match Results
-![Match Screenshot](docs/images/match.png)
+![Match Screenshot](docs/images/Screenshot%202025-10-17%20135951.png)
 *AI-powered matching with scores, justifications, and skill analysis*
 
 ### Interactive Chat
-![Chat Screenshot](docs/images/chat.png)
+![Chat Screenshot](docs/images/Screenshot%202025-10-17%20140345.png)
 *RAG-powered Q&A for deep-dive candidate exploration*
 
 ---
