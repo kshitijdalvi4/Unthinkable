@@ -1,9 +1,7 @@
 # 🎯 Smart Resume Screener
 
 > An AI-powered resume screening system using RAG (Retrieval Augmented Generation) and LLMs to intelligently match candidates with job descriptions.
-### Interface
-![Upload Screenshot](docs/images/upload.png)
-*Demo*
+[Demo Video Link](https://www.loom.com/share/18f4744ce9df491f9ff4dd6f7a089278?sid=04eac1be-63a8-471a-bcb9-633b14f215d8)
 ---
 
 
