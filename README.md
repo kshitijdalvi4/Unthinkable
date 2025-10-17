@@ -307,7 +307,7 @@ smart-resume-screener/
 ## 📸 Screenshots
 
 ### Upload Interface
-![Upload Screenshot](docs/images/Screenshot%202025-10-17%20140345.png)
+![Upload Screenshot](docs/images/Screenshot%202025-10-17%20135836.png)
 *Upload Resume*
 
 ### Match Results
