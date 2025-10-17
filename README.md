@@ -78,7 +78,7 @@ An intelligent resume screening system that:
 
 
 
-![Upload Screenshot](docs/images/upload.png)
+![Upload Screenshot](docs/images/Architechture-RAG.png)
 *RAG Architechture*
 
 
@@ -309,7 +309,7 @@ smart-resume-screener/
 ## 📸 Screenshots
 
 ### Upload Interface
-![Upload Screenshot](docs/images/upload.png)
+![Upload Screenshot](https://github.com/kshitijdalvi4/Unthinkable/blob/main/docs/images/Architechture-RAG.png)
 *Clean, intuitive resume upload interface with drag-and-drop support*
 
 ### Match Results
