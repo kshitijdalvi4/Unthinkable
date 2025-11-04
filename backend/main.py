@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 import json
 import re
+import time
 
 from google import genai
 from google.genai import types
@@ -16,10 +17,10 @@ from langchain_core.embeddings import Embeddings
 import chromadb
 import numpy as np
 
-# Initialize FastAPI
+# FastAPI
 app = FastAPI(title="Smart Resume Screener API")
 
-# CORS middleware
+# CORS 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
@@ -28,12 +29,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # Gemini API Key
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "gemini_api_key")
-
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDlYWCbgRh9Vu17zk5T1yUDU5l3wGDTZ-E")
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-
 
 # Custom Gemini Embeddings Class
 class GeminiEmbeddings(Embeddings):
@@ -107,18 +105,62 @@ class ChatQuery(BaseModel):
     question: str
 
 # Helper Functions
+import time
+from typing import Optional
+
+# Add retry decorator
+def retry_on_503(max_retries=3, delay=2):
+    """Decorator to retry on 503 errors"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    error_str = str(e)
+                    if '503' in error_str and attempt < max_retries - 1:
+                        print(f"503 error, retrying in {delay}s... (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(delay * (attempt + 1))  # Exponential backoff
+                        continue
+                    raise
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
 def clean_json_response(text: str) -> str:
     """Clean Gemini response to extract JSON"""
     # Remove markdown code blocks
     text = re.sub(r'```json\s*', '', text)
     text = re.sub(r'```\s*', '', text)
+    text = text.strip()
     
-    # Find JSON object
-    json_match = re.search(r'\{.*\}', text, re.DOTALL)
+    # Find JSON object - more aggressive matching
+    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
     if json_match:
-        return json_match.group(0)
+        json_str = json_match.group(0)
+        # Fix common JSON issues
+        json_str = re.sub(r',\s*}', '}', json_str)  # Remove trailing commas
+        json_str = re.sub(r',\s*]', ']', json_str)
+        return json_str
+    
+    # If no match, try to fix the text directly
+    # Remove leading text before {
+    if '{' in text:
+        text = text[text.index('{'):]
+    # Remove trailing text after }
+    if '}' in text:
+        text = text[:text.rindex('}') + 1]
     
     return text.strip()
+
+@retry_on_503(max_retries=3, delay=2)
+def call_gemini(prompt: str, model: str = "gemini-2.0-flash-exp") -> str:
+    """Call Gemini with retry logic"""
+    response = gemini_client.models.generate_content(
+        model=model,
+        contents=prompt,
+    )
+    return response.text
 
 def extract_resume_data(file_path: str) -> dict:
     """Extract structured data from resume using Gemini"""
@@ -128,49 +170,80 @@ def extract_resume_data(file_path: str) -> dict:
         
         full_text = "\n".join([doc.page_content for doc in documents])
         
-        extraction_prompt = """
-Extract the following information from this resume and return ONLY a valid JSON object:
+        extraction_prompt = """Extract candidate information from this resume as JSON.
 
-{
-  "name": "Full name of candidate",
-  "email": "Email address or empty string",
-  "skills": ["List of technical and soft skills"],
-  "experience_years": 0,
-  "education": ["List of degrees/certifications"]
-}
-
-Resume text:
+Resume:
 {resume_text}
 
-Instructions:
-- Return ONLY the JSON object, nothing else
-- If information is missing, use empty string "" or empty list []
-- For experience_years, estimate total years as a number (integer or float)
-- Extract all identifiable skills (programming languages, tools, frameworks, soft skills)
+Return this JSON (only JSON, no extra text):
+{{"name":"Full Name","email":"email@example.com","skills":["Python","Java"],"experience_years":3,"education":["Degree","University"]}}
+
+Rules:
+- name: Get from top of resume
+- email: Extract email address
+- skills: All technical skills as array
+- experience_years: Total years as number
+- education: Degrees/schools as array
 """
         
-        response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash-exp",
-            contents=extraction_prompt.format(resume_text=full_text[:6000]),
-        )
+        result_text = call_gemini(extraction_prompt.format(resume_text=full_text[:6000]))
         
-        result = clean_json_response(response.text)
-        data = json.loads(result)
+        # Try to parse JSON
+        result = clean_json_response(result_text)
+        
+        try:
+            data = json.loads(result)
+        except json.JSONDecodeError as e:
+            print(f"JSON parse error: {e}")
+            print(f"Attempted to parse: {result[:200]}")
+            # Try to extract with regex as fallback
+            data = {}
+            
+            # Extract name
+            name_match = re.search(r'"name"\s*:\s*"([^"]+)"', result_text)
+            if name_match:
+                data['name'] = name_match.group(1)
+            
+            # Extract email
+            email_match = re.search(r'"email"\s*:\s*"([^"]*)"', result_text)
+            if email_match:
+                data['email'] = email_match.group(1)
+            
+            # Extract skills array
+            skills_match = re.search(r'"skills"\s*:\s*\[(.*?)\]', result_text, re.DOTALL)
+            if skills_match:
+                skills_str = skills_match.group(1)
+                data['skills'] = [s.strip(' "\'') for s in skills_str.split(',') if s.strip()]
+            else:
+                data['skills'] = []
+            
+            # Extract experience_years
+            exp_match = re.search(r'"experience_years"\s*:\s*(\d+\.?\d*)', result_text)
+            if exp_match:
+                data['experience_years'] = float(exp_match.group(1))
+            else:
+                data['experience_years'] = 0
+            
+            # Extract education array
+            edu_match = re.search(r'"education"\s*:\s*\[(.*?)\]', result_text, re.DOTALL)
+            if edu_match:
+                edu_str = edu_match.group(1)
+                data['education'] = [s.strip(' "\'') for s in edu_str.split(',') if s.strip()]
+            else:
+                data['education'] = []
+        
+        # Fallback: Try to extract name from first lines if still missing
+        if not data.get('name') or data.get('name').lower() in ['unknown', 'candidate', '', 'full name']:
+            first_lines = full_text.split('\n')[:5]
+            for line in first_lines:
+                line = line.strip()
+                if line and len(line.split()) <= 4 and len(line) > 3 and not '@' in line and not any(c in line for c in ['http', ':', '/']):
+                    data['name'] = line
+                    break
+        
         data['raw_text'] = full_text
-        
         return data
         
-    except json.JSONDecodeError as e:
-        print(f"JSON parsing error: {e}")
-        print(f"Response text: {response.text[:500]}")
-        return {
-            "name": "Unknown",
-            "email": "",
-            "skills": [],
-            "experience_years": 0,
-            "education": [],
-            "raw_text": full_text if 'full_text' in locals() else ""
-        }
     except Exception as e:
         print(f"Error extracting resume data: {e}")
         return {
@@ -179,11 +252,24 @@ Instructions:
             "skills": [],
             "experience_years": 0,
             "education": [],
-            "raw_text": ""
+            "raw_text": full_text if 'full_text' in locals() else ""
         }
 
 def compute_match_score(resume_data: dict, job_desc: JobDescription) -> MatchResult:
     """Use Gemini to compute semantic match between resume and job"""
+    
+    # Extract actual name from resume text if still "Unknown"
+    candidate_name = resume_data.get('name', 'Unknown')
+    if candidate_name.lower() in ['unknown', 'candidate', '']:
+        # Try to extract from raw text
+        first_lines = resume_data.get('raw_text', '').split('\n')[:10]
+        for line in first_lines:
+            line = line.strip()
+            # Look for name pattern (2-4 words, capitalized, no special chars)
+            if line and 2 <= len(line.split()) <= 4 and line[0].isupper() and not any(c in line for c in ['@', 'http', ':', '/']):
+                candidate_name = line
+                resume_data['name'] = line
+                break
     
     matching_prompt = f"""
 You are an expert HR recruiter. Compare this candidate's resume with the job description.
@@ -195,7 +281,7 @@ Required Skills: {', '.join(job_desc.required_skills)}
 Required Experience: {job_desc.experience_years} years
 
 CANDIDATE PROFILE:
-Name: {resume_data.get('name', 'Unknown')}
+Name: {candidate_name}
 Skills: {', '.join(resume_data.get('skills', []))}
 Experience: {resume_data.get('experience_years', 0)} years
 Education: {', '.join(resume_data.get('education', []))}
@@ -203,15 +289,20 @@ Education: {', '.join(resume_data.get('education', []))}
 Resume excerpt:
 {resume_data.get('raw_text', '')[:2500]}
 
-Provide a detailed analysis in JSON format (return ONLY the JSON):
+Provide a detailed analysis in JSON format (return ONLY the JSON, no markdown):
 
 {{
   "match_score": 7.5,
-  "justification": "Brief 2-3 sentence summary of overall fit",
+  "justification": "Brief 2-3 sentence summary without using asterisks or markdown. Use plain text only.",
   "matched_skills": ["skills candidate has that match requirements"],
   "missing_skills": ["required skills candidate lacks"],
   "experience_match": true
 }}
+
+IMPORTANT: 
+- Write justification in plain text without any markdown formatting
+- Do not use asterisks (*) or other markdown symbols
+- Use natural sentences with proper punctuation
 
 Scoring guide:
 - 9-10: Perfect fit, exceeds requirements
@@ -220,7 +311,7 @@ Scoring guide:
 - 3-4: Weak fit, significant gaps
 - 0-2: Poor fit, major misalignment
 
-Return ONLY the JSON object, no other text.
+Return ONLY the JSON object, no other text or formatting.
 """
     
     try:
@@ -405,12 +496,14 @@ async def chat_resume(query: ChatQuery):
         prompt = f"""Use the following pieces of context from the candidate's resume to answer the question.
 If you don't know the answer based on the context, just say you don't know. Don't make up information.
 
+IMPORTANT: Provide your answer in plain text format without using markdown symbols like asterisks (*), bullets, or special formatting. Write in natural, flowing sentences.
+
 Context from resume:
 {context}
 
 Question: {query.question}
 
-Answer:"""
+Answer (plain text only, no markdown):"""
         
         response = gemini_client.models.generate_content(
             model="gemini-2.0-flash-exp",

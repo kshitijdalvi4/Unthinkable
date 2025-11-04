@@ -18,6 +18,28 @@ interface Candidate {
   candidate_name: string;
 }
 
+// Utility function to convert markdown-style text to formatted HTML
+const formatText = (text: string) => {
+  if (!text) return text;
+  
+  // Convert **bold** to <strong>
+  let formatted = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  
+  // Convert single * bullets to proper bullets
+  formatted = formatted.replace(/^\* /gm, '• ');
+  
+  // Convert *italic* to <em>
+  formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  
+  return formatted;
+};
+
+// Component to render formatted text
+const FormattedText: React.FC<{ text: string; className?: string }> = ({ text, className = '' }) => {
+  const formatted = formatText(text);
+  return <div className={className} dangerouslySetInnerHTML={{ __html: formatted }} />;
+};
+
 export default function ResumeScreener() {
   const [activeTab, setActiveTab] = useState<'upload' | 'match' | 'chat'>('upload');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -320,7 +342,7 @@ export default function ResumeScreener() {
                         </div>
                       </div>
 
-                      <p className="text-gray-700 mb-4">{result.justification}</p>
+                      <FormattedText text={result.justification} className="text-gray-700 mb-4" />
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -399,7 +421,7 @@ export default function ResumeScreener() {
                             <p className="font-medium text-indigo-900">Q: {chat.q}</p>
                           </div>
                           <div className="bg-white border border-gray-200 rounded-lg p-4">
-                            <p className="text-gray-800">{chat.a}</p>
+                            <FormattedText text={chat.a} className="text-gray-800" />
                           </div>
                         </div>
                       ))}
