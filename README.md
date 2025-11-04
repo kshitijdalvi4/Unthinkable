@@ -1,9 +1,7 @@
 # 🎯 Smart Resume Screener
 
 > An AI-powered resume screening system using RAG (Retrieval Augmented Generation) and LLMs to intelligently match candidates with job descriptions.
-### Interface
-![Upload Screenshot](docs/images/upload.png)
-*Demo*
+[Demo Video Link](https://www.loom.com/share/18f4744ce9df491f9ff4dd6f7a089278?sid=04eac1be-63a8-471a-bcb9-633b14f215d8)
 ---
 
 
@@ -78,7 +76,7 @@ An intelligent resume screening system that:
 
 
 
-![Upload Screenshot](docs/images/upload.png)
+![Upload Screenshot](docs/images/Architechture-RAG.png)
 *RAG Architechture*
 
 
@@ -309,15 +307,15 @@ smart-resume-screener/
 ## 📸 Screenshots
 
 ### Upload Interface
-![Upload Screenshot](docs/images/upload.png)
-*Clean, intuitive resume upload interface with drag-and-drop support*
+![Upload Screenshot](docs/images/Screenshot%202025-10-17%20135836.png)
+*Upload Resume*
 
 ### Match Results
-![Match Screenshot](docs/images/match.png)
+![Match Screenshot](docs/images/Screenshot%202025-10-17%20135951.png)
 *AI-powered matching with scores, justifications, and skill analysis*
 
 ### Interactive Chat
-![Chat Screenshot](docs/images/chat.png)
+![Chat Screenshot](docs/images/Screenshot%202025-10-17%20140345.png)
 *RAG-powered Q&A for deep-dive candidate exploration*
 
 ---
@@ -334,8 +332,6 @@ smart-resume-screener/
 ---
 
 ## 📞 Contact & Support
-
--
 - **Email**: kshitijdalvi22@gmail.com
 
 
