@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /bin/bash
 sudo apt update -y
 sudo apt upgrade -y
 sudo add-apt-repository -y ppa:deadsnakes/ppa
@@ -37,11 +37,11 @@ server {
 
     # Serve frontend files
     location / {
-        try_files \$uri \$uri/ /index.html;
+        try_files \$uri \$uri/ @backend; 
     }
 
     # Proxy API requests
-    location /api/ {
+    location @backend {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -103,3 +103,6 @@ sudo chmod 755 /home/ubuntu
 sudo chmod 755 /home/ubuntu/test
 sudo chmod 755 /home/ubuntu/test/Unthinkable
 sudo chmod 755 /home/ubuntu/test/Unthinkable/frontend
+
+sudo systemctl restart nginx
+sudo systemctl restart gunicorn
