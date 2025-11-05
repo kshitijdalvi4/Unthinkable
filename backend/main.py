@@ -23,7 +23,7 @@ app = FastAPI(title="Smart Resume Screener API")
 # CORS 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "https://codemos-services.co.in"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
