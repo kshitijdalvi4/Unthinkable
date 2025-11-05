@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Search, MessageSquare, Users, CheckCircle, XCircle, Sparkles, FileText, Briefcase } from 'lucide-react';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'https://codemos-services.co.in';
 
 interface MatchResult {
   candidate_id: string;
