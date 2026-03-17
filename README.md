@@ -1,4 +1,6 @@
-# JSO: Job Search Optimiser (Phase-2)
+# Unthinkable - JSO (Job Search Optimizer)
+*Last Updated: March 17, 2026*
+ (Phase-2)
 
 Welcome to the **Job Search Optimiser (JSO)** project. This is an agentic AI ecosystem designed to streamline career growth through intelligent job discovery, automated application handling, and resume-centric RAG intelligence.
 
