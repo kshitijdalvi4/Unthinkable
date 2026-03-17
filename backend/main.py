@@ -24,7 +24,7 @@ from google.auth.transport import requests
 from google import genai
 from google.genai import types
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.embeddings import Embeddings
 import chromadb
@@ -56,8 +56,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Gemini API Key
+# Gemini Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-1.5-flash")
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Custom Gemini Embeddings Class
@@ -191,7 +192,7 @@ def clean_json_response(text: str) -> str:
 def call_gemini_sync(prompt: str, model: str = None) -> str:
     """Call Gemini with retry logic (Synchronous)"""
     if model is None:
-        model = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+        model = LLM_MODEL
     print(f"[LLM] Calling {model}...")
     response = gemini_client.models.generate_content(
         model=model,
@@ -385,7 +386,7 @@ Return ONLY the JSON object, no other text or formatting.
     
     try:
         response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=LLM_MODEL,
             contents=matching_prompt,
         )
         
@@ -557,7 +558,7 @@ async def chat_resume(query: ChatQuery):
         )
         
         # Retrieve relevant documents
-        retrieved_docs = retriever.get_relevant_documents(query.question)
+        retrieved_docs = retriever.invoke(query.question)
         context = "\n\n".join([doc.page_content for doc in retrieved_docs])
         
         if not context.strip():
@@ -580,7 +581,7 @@ Question: {query.question}
 Answer (plain text only, no markdown):"""
         
         response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=LLM_MODEL,
             contents=prompt,
         )
         
