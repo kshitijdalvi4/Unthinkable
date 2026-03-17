@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 import json
 
 from agents.state import AgentState, JobRoleMatch, ResumeStateData, CrawledJob, FormQuestion
