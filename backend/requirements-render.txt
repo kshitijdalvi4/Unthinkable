@@ -1,15 +1,17 @@
 # Production requirements for Render (Linux)
-# Loosely pinned to avoid conflicts
+# Complete set discovered via full import audit
 
 # Core Web Framework
 fastapi
 uvicorn[standard]
 python-multipart
 pydantic>=2.0
+pydantic-settings
 
 # Database
 motor
 pymongo
+certifi
 
 # Google AI
 google-genai
@@ -23,6 +25,9 @@ langchain-text-splitters
 langchain-chroma
 langchain-google-genai
 
+# LangGraph (agent orchestration)
+langgraph
+
 # Vector Store
 chromadb
 
@@ -31,7 +36,7 @@ pypdf
 beautifulsoup4
 
 # Search
-duckduckgo-search
+duckduckgo-search==7.5.0
 
 # Browser Automation
 playwright
@@ -40,3 +45,4 @@ playwright
 python-dotenv
 requests
 numpy
+typing-extensions
