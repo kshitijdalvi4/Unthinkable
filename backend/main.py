@@ -599,9 +599,17 @@ async def google_auth(data: GoogleToken):
     """Verify Google ID token and return/create candidate profile."""
     try:
         # Verify the token
-        # In a real production app, CLIENT_ID should be in .env
         CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-        idinfo = id_token.verify_oauth2_token(data.token, requests.Request(), CLIENT_ID)
+        print(f"[AUTH] Verifying token for CLIENT_ID: {CLIENT_ID[:10]}...")
+        
+        # Verify the token in a thread pool to avoid blocking the event loop
+        idinfo = await asyncio.to_thread(
+            id_token.verify_oauth2_token, 
+            data.token, 
+            requests.Request(), 
+            CLIENT_ID
+        )
+        print(f"[AUTH] Token verified for: {idinfo.get('email')}")
         
         email = idinfo.get('email')
         name = idinfo.get('name', 'Google User')
