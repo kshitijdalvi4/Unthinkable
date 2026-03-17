@@ -21,6 +21,7 @@ langchain-community
 langchain-core
 langchain-text-splitters
 langchain-chroma
+langchain-google-genai
 
 # Vector Store
 chromadb
