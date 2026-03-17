@@ -599,7 +599,7 @@ async def google_auth(data: GoogleToken):
     """Verify Google ID token and return/create candidate profile."""
     try:
         # Verify the token
-        CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+        CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
         print(f"[AUTH] Verifying token for CLIENT_ID: {CLIENT_ID[:10]}...")
         
         # Verify the token in a thread pool to avoid blocking the event loop

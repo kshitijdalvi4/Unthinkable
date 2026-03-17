@@ -24,7 +24,9 @@ def get_client() -> AsyncIOMotorClient:
         # tlsCAFile=certifi.where() fixes common SSL handshake errors with Atlas on Windows
         _client = AsyncIOMotorClient(
             MONGO_URI,
-            tlsCAFile=certifi.where()
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000
         )
     return _client
 
@@ -42,14 +44,18 @@ def applications_col():
 
 async def get_candidate(candidate_id: str) -> Optional[dict]:
     """Return full candidate document or None."""
+    print(f"[DB] get_candidate: {candidate_id}")
     doc = await candidates_col().find_one({"_id": candidate_id})
+    print(f"[DB] get_candidate result: {'Found' if doc else 'Not Found'}")
     return doc
 
 async def get_candidate_by_email(email: str) -> Optional[dict]:
     """Find a candidate by email for deduplication."""
     if not email:
         return None
+    print(f"[DB] get_candidate_by_email: {email}")
     doc = await candidates_col().find_one({"email": email})
+    print(f"[DB] get_candidate_by_email result: {'Found' if doc else 'Not Found'}")
     return doc
 
 async def upsert_candidate(candidate_id: str, data: dict) -> None:
