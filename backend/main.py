@@ -4,7 +4,7 @@ import asyncio
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -17,6 +17,9 @@ from datetime import datetime
 import json
 import re
 import time
+
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 from google import genai
 from google.genai import types
@@ -44,10 +47,10 @@ application_graph = build_application_graph()
 # FastAPI
 app = FastAPI(title="Smart Resume Screener API")
 
-# CORS 
+# CORS - Allow all for deployment ease
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,9 +72,11 @@ class GeminiEmbeddings(Embeddings):
         embeddings = []
         for text in texts:
             try:
+                # User requested gemini-embedding-001
                 response = self.client.models.embed_content(
                     model="gemini-embedding-001",
-                    contents=text
+                    contents=text,
+                    config={'output_dimensionality': 768}
                 )
                 embeddings.append(response.embeddings[0].values)
             except Exception as e:
@@ -83,9 +88,11 @@ class GeminiEmbeddings(Embeddings):
     def embed_query(self, text: str) -> List[float]:
         """Embed a single query"""
         try:
+            # User requested gemini-embedding-001
             response = self.client.models.embed_content(
-                model="text-embedding-004",
-                contents=text
+                model="gemini-embedding-001",
+                contents=text,
+                config={'output_dimensionality': 768}
             )
             return response.embeddings[0].values
         except Exception as e:
@@ -127,6 +134,9 @@ class MatchResult(BaseModel):
 class ChatQuery(BaseModel):
     candidate_id: str
     question: str
+
+class GoogleToken(BaseModel):
+    token: str
 
 # Helper Functions
 import time
@@ -193,13 +203,14 @@ async def call_gemini(prompt: str, model: str = None) -> str:
     """Async wrapper for call_gemini_sync"""
     return await asyncio.to_thread(call_gemini_sync, prompt, model)
 
-async def extract_resume_data(file_path: str, candidate_id: str) -> dict:
+async def extract_resume_data(file_path: str, candidate_id: str, force_extract: bool = False) -> dict:
     """Extract structured data from resume using Gemini or load from MongoDB cache."""
     # --- MongoDB cache lookup ---
-    cached = await get_candidate(candidate_id)
-    if cached:
-        print(f"[CACHE] MongoDB hit for {candidate_id}. additional_info: {cached.get('additional_info')}")
-        return cached
+    if not force_extract:
+        cached = await get_candidate(candidate_id)
+        if cached:
+            print(f"[CACHE] MongoDB hit for {candidate_id}. additional_info: {cached.get('additional_info')}")
+            return cached
 
     # --- Full Gemini extraction ---
     try:
@@ -426,14 +437,16 @@ async def root():
     }
 
 @app.post("/upload-resume/")
-async def upload_resume(file: UploadFile = File(...)):
-    """Upload and process a single resume"""
+async def upload_resume(file: UploadFile = File(...), candidate_id: Optional[str] = Form(None)):
+    """Upload and process a single resume. If candidate_id is provided, it overwrites the existing record."""
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
     
     try:
         # Save uploaded file
-        candidate_id = f"candidate_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        if not candidate_id:
+            candidate_id = f"candidate_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        
         file_path = f"./uploads/{candidate_id}.pdf"
         os.makedirs("./uploads", exist_ok=True)
         
@@ -441,8 +454,8 @@ async def upload_resume(file: UploadFile = File(...)):
             content = await file.read()
             f.write(content)
         
-        # Extract data (async — checks MongoDB first)
-        processed_data = await extract_resume_data(file_path, candidate_id)
+        # Extract data (async — force re-extraction for new file)
+        processed_data = await extract_resume_data(file_path, candidate_id, force_extract=True)
         
         # In case deduplication used a different ID
         effective_id = processed_data.get('_id', candidate_id)
@@ -464,12 +477,27 @@ async def upload_resume(file: UploadFile = File(...)):
         
         # Store in vector DB (non-fatal if it fails - resume data is still returned)
         try:
-            vectorstore = Chroma.from_documents(
+            # Delete old chunks for this candidate to ensure "most recent resume" is used for RAG
+            vectorstore = Chroma(
+                persist_directory=CHROMA_PATH,
+                embedding_function=embeddings,
+                collection_name="resumes"
+            )
+            # Use delete with filter
+            try:
+                vectorstore.delete(where={"candidate_id": effective_id})
+                print(f"[RAG] Deleted old chunks for {effective_id}")
+            except Exception as e:
+                print(f"[RAG] Skip deletion (collection may be empty): {e}")
+
+            # Store new chunks
+            Chroma.from_documents(
                 documents=docs,
                 embedding=embeddings,
                 persist_directory=CHROMA_PATH,
                 collection_name="resumes"
             )
+            print(f"[RAG] Ingested {len(docs)} new chunks for {effective_id}")
         except Exception as chroma_err:
             print(f"[WARN] ChromaDB storage failed (non-fatal): {chroma_err}")
         
@@ -564,6 +592,65 @@ Answer (plain text only, no markdown):"""
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+@app.post("/api/auth/google/")
+async def google_auth(data: GoogleToken):
+    """Verify Google ID token and return/create candidate profile."""
+    try:
+        # Verify the token
+        # In a real production app, CLIENT_ID should be in .env
+        CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+        idinfo = id_token.verify_oauth2_token(data.token, requests.Request(), CLIENT_ID)
+        
+        email = idinfo.get('email')
+        name = idinfo.get('name', 'Google User')
+        
+        if not email:
+            raise HTTPException(status_code=400, detail="Email not found in Google token")
+            
+        # Check if user exists
+        candidate = await get_candidate_by_email(email)
+        
+        if candidate:
+            print(f"[AUTH] Returning user found: {email}")
+            return {
+                "candidate_id": candidate["_id"],
+                "candidate_name": candidate.get("name", name),
+                "profile": candidate.get("knowledge_base", {}),
+                "has_resume": True
+            }
+        else:
+            print(f"[AUTH] New user via Google: {email}")
+            # Create a stub profile
+            candidate_id = f"candidate_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+            stub_profile = {
+                "name": name,
+                "email": email,
+                "skills": [],
+                "experience_years": 0.0,
+                "phone": "",
+                "expected_salary": "",
+                "current_ctc": "",
+                "notice_period": ""
+            }
+            # Upsert into MongoDB
+            from db import upsert_candidate
+            await upsert_candidate(candidate_id, {"email": email, "name": name, "knowledge_base": stub_profile})
+            
+            return {
+                "candidate_id": candidate_id,
+                "candidate_name": name,
+                "profile": stub_profile,
+                "has_resume": False
+            }
+            
+    except ValueError as e:
+        # Invalid token
+        raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
 @app.get("/candidates/")
 async def get_all_candidates():
