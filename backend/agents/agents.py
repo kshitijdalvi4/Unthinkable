@@ -99,12 +99,23 @@ def crawl_jobs_node(state: AgentState) -> dict:
     all_jobs = []
     
     import threading
+    import time as _time
     crawl_done = threading.Event()
+
+    # Browser-like headers to avoid cloud IP rate-limiting by DuckDuckGo
+    _HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Referer": "https://duckduckgo.com/",
+    }
 
     def do_crawl():
         try:
-            with DDGS() as ddgs:
-                for role in roles_to_search:
+            with DDGS(headers=_HEADERS) as ddgs:
+                for i, role in enumerate(roles_to_search):
+                    if i > 0:
+                        _time.sleep(1.5)  # Small delay between searches to avoid back-to-back rate limits
                     parts = [f"'{role}' job opening"]
                     if location_str:
                         parts.append(location_str)
