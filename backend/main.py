@@ -30,6 +30,9 @@ from langchain_core.embeddings import Embeddings
 import chromadb
 import numpy as np
 
+# MongoDB
+from db import get_candidate, upsert_candidate, update_additional_info, save_application, get_applications, get_candidate_by_email, update_knowledge_base
+
 # FastAPI
 app = FastAPI(title="Smart Resume Screener API")
 
