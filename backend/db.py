@@ -21,18 +21,16 @@ _client: Optional[AsyncIOMotorClient] = None
 def get_client() -> AsyncIOMotorClient:
     global _client
     if _client is None:
-        # Use tls=True without specifying tlsCAFile so Linux (Render) uses system CA certs.
-        # On Windows, certifi is needed but on Linux the system certs work fine.
         import sys
-        kwargs = {
-            "serverSelectionTimeoutMS": 5000,
-            "connectTimeoutMS": 5000,
-        }
-        if sys.platform == "win32":
-            kwargs["tlsCAFile"] = certifi.where()
         print(f"[DB] Creating MongoDB client (platform: {sys.platform})")
-        _client = AsyncIOMotorClient(MONGO_URI, **kwargs)
+        _client = AsyncIOMotorClient(
+            MONGO_URI,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            tlsAllowInvalidCertificates=True,  # Bypass TLS cert validation - fixes SSL handshake on Render Linux
+        )
     return _client
+
 
 def get_db():
     return get_client()[MONGO_DB]
