@@ -21,14 +21,12 @@ _client: Optional[AsyncIOMotorClient] = None
 def get_client() -> AsyncIOMotorClient:
     global _client
     if _client is None:
-        import sys
-        print(f"[DB] Creating MongoDB client (platform: {sys.platform})")
+        print(f"[DB] Creating MongoDB client with certifi CA bundle")
         _client = AsyncIOMotorClient(
             MONGO_URI,
-            tls=True,                              # Enable TLS explicitly
-            tlsAllowInvalidCertificates=True,      # Skip cert validation (fixes Render Linux SSL error)
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000,
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=10000,
+            connectTimeoutMS=10000,
         )
     return _client
 
