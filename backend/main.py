@@ -30,22 +30,38 @@ from langchain_core.embeddings import Embeddings
 import chromadb
 import numpy as np
 
-# V2 Imports
-from agents.graph import build_discovery_graph, build_application_graph
-from agents.state import AgentState, ResumeStateData
-
-# V3 Imports
-from automation.browser_agent import auto_fill_job
-
-# MongoDB
-from db import get_candidate, upsert_candidate, update_additional_info, save_application, get_applications, get_candidate_by_email
-
-# Initialize V2 Graphs
-discovery_graph = build_discovery_graph()
-application_graph = build_application_graph()
-
 # FastAPI
 app = FastAPI(title="Smart Resume Screener API")
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint - moved to top for Render stability"""
+    return {
+        "status": "healthy",
+        "model": "Gemini 2.5 Flash",
+        "embeddings": "Gemini text-embedding-004",
+        "chroma_path": CHROMA_PATH
+    }
+
+# Lazy Loading for V2 Graphs (to prevent Render startup timeouts)
+_discovery_graph = None
+_application_graph = None
+
+def get_discovery_graph():
+    global _discovery_graph
+    if _discovery_graph is None:
+        print("[INIT] Building discovery graph...")
+        from agents.graph import build_discovery_graph
+        _discovery_graph = build_discovery_graph()
+    return _discovery_graph
+
+def get_application_graph():
+    global _application_graph
+    if _application_graph is None:
+        print("[INIT] Building application graph...")
+        from agents.graph import build_application_graph
+        _application_graph = build_application_graph()
+    return _application_graph
 
 # CORS - Allow all for deployment ease
 app.add_middleware(
@@ -695,16 +711,6 @@ async def delete_candidate(candidate_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "model": "Gemini 2.5 Flash",
-        "embeddings": "Gemini text-embedding-004",
-        "chroma_path": CHROMA_PATH
-    }
-
 # --- V2 MODELS ---
 
 class V2SuggestRolesRequest(BaseModel):
@@ -786,7 +792,7 @@ async def v2_discover_jobs(request: V2DiscoverJobsRequest):
             "crawled_jobs": [j.model_dump() for j in result.get("crawled_jobs", [])]
         }
 
-    result = discovery_graph.invoke(state)
+    result = get_discovery_graph().invoke(state)
     return {
         "suggested_roles": [r.model_dump() for r in result.get("suggested_roles", [])],
         "crawled_jobs": [j.model_dump() for j in result.get("crawled_jobs", [])]
@@ -814,7 +820,7 @@ async def v2_apply_job(request: V2ApplyJobRequest):
     )
     
     # Run heavy LangGraph invocation in a separate thread to keep event loop responsive
-    result = await asyncio.to_thread(application_graph.invoke, state, config)
+    result = await asyncio.to_thread(get_application_graph().invoke, state, config)
     
     return {
         "candidate_id": canonical_id, # Return canonical ID to frontend
@@ -843,12 +849,8 @@ async def v2_approve_application(request: V2ApproveApplicationRequest):
         status="logged"
     )
 
-    # ── Resume the LangGraph ───────────────────────────────────────────────
-    # Update state to human_approved=True before resuming invocation
-    application_graph.update_state(config, {"human_approved": True})
-    
     # Run heavy LangGraph invocation in a separate thread
-    result = await asyncio.to_thread(application_graph.invoke, None, config)
+    result = await asyncio.to_thread(get_application_graph().invoke, None, config)
     
     return {
         "application_status": result.get("application_status")
