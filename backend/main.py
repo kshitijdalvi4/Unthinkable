@@ -33,6 +33,10 @@ import numpy as np
 # MongoDB
 from db import get_candidate, upsert_candidate, update_additional_info, save_application, get_applications, get_candidate_by_email, update_knowledge_base
 
+# V2 & V3 State & Automation Imports
+from agents.state import AgentState, ResumeStateData
+from automation.browser_agent import auto_fill_job
+
 # FastAPI
 app = FastAPI(title="Smart Resume Screener API")
 
