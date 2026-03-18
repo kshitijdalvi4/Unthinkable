@@ -98,42 +98,68 @@ def crawl_jobs_node(state: AgentState) -> dict:
 
     all_jobs = []
     
-    try:
-        with DDGS() as ddgs:
-            for role in roles_to_search:
-                parts = [f"'{role}' job opening"]
-                if location_str:
-                    parts.append(location_str)
-                if work_str:
-                    parts.append(work_str)
-                parts.append("site:linkedin.com/jobs OR site:jooble.org OR site:indeed.com")
-                query = " ".join(parts)
-                try:
-                    results = ddgs.text(query, max_results=4)
-                    for res in results:
-                        # Infer source from URL domain
-                        url = res.get("href", "")
-                        if "linkedin" in url: source = "LinkedIn"
-                        elif "indeed" in url: source = "Indeed"
-                        elif "jooble" in url: source = "Jooble"
-                        elif "glassdoor" in url: source = "Glassdoor"
-                        else: source = "Web"
-                        all_jobs.append(CrawledJob(
-                            title=role,
-                            company="Unknown",
-                            url=url,
-                            source=source,
-                            description=res.get("body", "")[:250]
-                        ))
-                except Exception as e:
-                    print(f"Error searching for {role} via DDG: {e}")
-    except Exception as e:
-        print(f"Failed to initialize DDGS: {e}")
-        all_jobs = [
-            CrawledJob(title=f"Senior {roles_to_search[0]}", company="Acme Corp", url="https://example.com/job1", source="Mock Fallback", description="Great job."),
-            CrawledJob(title=f"{roles_to_search[0]} Engineer", company="Techify", url="https://example.com/job2", source="Mock Fallback", description="Awesome job.")
-        ]
-            
+    import threading
+    crawl_done = threading.Event()
+
+    def do_crawl():
+        try:
+            with DDGS() as ddgs:
+                for role in roles_to_search:
+                    parts = [f"'{role}' job opening"]
+                    if location_str:
+                        parts.append(location_str)
+                    if work_str:
+                        parts.append(work_str)
+                    parts.append("site:linkedin.com/jobs OR site:jooble.org OR site:indeed.com")
+                    query = " ".join(parts)
+                    try:
+                        results = ddgs.text(query, max_results=4)
+                        for res in results:
+                            url = res.get("href", "")
+                            if "linkedin" in url: source = "LinkedIn"
+                            elif "indeed" in url: source = "Indeed"
+                            elif "jooble" in url: source = "Jooble"
+                            elif "glassdoor" in url: source = "Glassdoor"
+                            else: source = "Web"
+                            all_jobs.append(CrawledJob(
+                                title=role,
+                                company="Unknown",
+                                url=url,
+                                source=source,
+                                description=res.get("body", "")[:250]
+                            ))
+                    except Exception as e:
+                        print(f"Error searching for {role} via DDG: {e}")
+        except Exception as e:
+            print(f"Failed to initialize DDGS: {e}")
+        finally:
+            crawl_done.set()
+
+    crawl_thread = threading.Thread(target=do_crawl, daemon=True)
+    crawl_thread.start()
+    finished = crawl_done.wait(timeout=25)  # 25-second hard timeout
+
+    if not finished:
+        print("[WARN] DDGS crawl timed out after 25s — returning partial/fallback results")
+
+    # Fallback if nothing was found
+    if not all_jobs:
+        for role in roles_to_search[:2]:
+            all_jobs.append(CrawledJob(
+                title=role,
+                company="Search Unavailable",
+                url=f"https://www.linkedin.com/jobs/search/?keywords={role.replace(' ', '+')}",
+                source="LinkedIn",
+                description="Direct link to LinkedIn job search for this role."
+            ))
+            all_jobs.append(CrawledJob(
+                title=role,
+                company="Search Unavailable",
+                url=f"https://in.indeed.com/jobs?q={role.replace(' ', '+')}",
+                source="Indeed",
+                description="Direct link to Indeed job search for this role."
+            ))
+
     return {"crawled_jobs": all_jobs[:12]}
 
 class FormQuestionsList(BaseModel):
