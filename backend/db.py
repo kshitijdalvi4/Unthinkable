@@ -21,13 +21,17 @@ _client: Optional[AsyncIOMotorClient] = None
 def get_client() -> AsyncIOMotorClient:
     global _client
     if _client is None:
-        # tlsCAFile=certifi.where() fixes common SSL handshake errors with Atlas on Windows
-        _client = AsyncIOMotorClient(
-            MONGO_URI,
-            tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000
-        )
+        # Use tls=True without specifying tlsCAFile so Linux (Render) uses system CA certs.
+        # On Windows, certifi is needed but on Linux the system certs work fine.
+        import sys
+        kwargs = {
+            "serverSelectionTimeoutMS": 5000,
+            "connectTimeoutMS": 5000,
+        }
+        if sys.platform == "win32":
+            kwargs["tlsCAFile"] = certifi.where()
+        print(f"[DB] Creating MongoDB client (platform: {sys.platform})")
+        _client = AsyncIOMotorClient(MONGO_URI, **kwargs)
     return _client
 
 def get_db():
