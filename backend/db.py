@@ -25,11 +25,13 @@ def get_client() -> AsyncIOMotorClient:
         print(f"[DB] Creating MongoDB client (platform: {sys.platform})")
         _client = AsyncIOMotorClient(
             MONGO_URI,
+            tls=True,                              # Enable TLS explicitly
+            tlsAllowInvalidCertificates=True,      # Skip cert validation (fixes Render Linux SSL error)
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
-            tlsAllowInvalidCertificates=True,  # Bypass TLS cert validation - fixes SSL handshake on Render Linux
         )
     return _client
+
 
 
 def get_db():
