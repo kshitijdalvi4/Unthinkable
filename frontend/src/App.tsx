@@ -40,16 +40,27 @@ function LoginScreen({ onLogin }: { onLogin: (data: any) => void }) {
   async function handleSuccess(credentialResponse: any) {
     setLoading(true); setError('')
     try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
       const resp = await fetch(`${API}/api/auth/google/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: credentialResponse.credential })
+        body: JSON.stringify({ token: credentialResponse.credential }),
+        signal: controller.signal
       })
-      if (!resp.ok) throw new Error(await resp.text())
+      clearTimeout(timeout)
+      if (!resp.ok) {
+        const errText = await resp.text()
+        throw new Error(`Server error ${resp.status}: ${errText}`)
+      }
       const data = await resp.json()
       onLogin(data)
     } catch (e: any) {
-      setError('Authentication failed. Check if server has GOOGLE_CLIENT_ID.')
+      if (e.name === 'AbortError') {
+        setError('Request timed out. Backend may be starting up — please try again in 30s.')
+      } else {
+        setError(`Authentication failed: ${e.message}`)
+      }
     } finally {
       setLoading(false)
     }
