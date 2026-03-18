@@ -134,7 +134,7 @@ function UploadStep({ candidateId, onUploaded }: { candidateId: string, onUpload
     if (candidateId) formData.append('candidate_id', candidateId)
 
     try {
-      const resp = await fetch(`${API}/upload-resume//`, { method: 'POST', body: formData })
+      const resp = await fetch(`${API}/upload-resume/`, { method: 'POST', body: formData })
       if (!resp.ok) throw new Error(await resp.text())
       const data = await resp.json()
       onUploaded(data.candidate_id, data.data?.name || 'Candidate', data.data)
